@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1e1b16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Lodhi Art District — Interactive Map</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@300;400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f0e8;
+    --dark: #1e1b16;
+    --gold: #c8a24a;
+    --gold-lt: #e8cc7a;
+    --panel: #faf8f4;
+    --border: rgba(30,27,22,0.1);
+    --text: #2c2820;
+    --muted: #8a8070;
+
+    --cat-mural:   #c0563a;
+    --cat-park:    #4a8a5c;
+    --cat-food:    #c07830;
+    --cat-culture: #5870b0;
+    --cat-landmark:#7a50a0;
+
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html, body { width: 100%; height: 100%; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--dark);
+    font-family: 'Outfit', sans-serif;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overscroll-behavior: none;
+  }
+
+  /* ── TOP BAR ──────────────────────────────── */
+  #topbar {
+    background: var(--dark);
+    padding: calc(var(--safe-top) + 10px) 14px 10px;
+    flex-shrink: 0;
+    z-index: 1000;
+    border-bottom: 1px solid rgba(200,162,74,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+  .brand h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #f5f0e8;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .brand h1 em {
+    color: var(--gold);
+    font-style: normal;
+  }
+  .brand .sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(245,240,232,0.4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Hamburger / filter toggle button */
+  #filter-toggle {
+    flex-shrink: 0;
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    background: rgba(245,240,232,0.08);
+    border: 1px solid rgba(245,240,232,0.15);
+    color: #f5f0e8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+    padding: 0;
+    position: relative;
+  }
+  #filter-toggle:active { background: rgba(245,240,232,0.15); }
+  #filter-toggle .bar {
+    width: 18px; height: 2px;
+    background: #f5f0e8;
+    border-radius: 2px;
+    transition: all 0.2s;
+  }
+  #filter-toggle.open .bar:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+  #filter-toggle.open .bar:nth-child(2) {
+    opacity: 0;
+  }
+  #filter-toggle.open .bar:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+  #filter-toggle .filter-count {
+    position: absolute;
+    top: -4px; right: -4px;
+    background: var(--gold);
+    color: var(--dark);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.55rem;
+    font-weight: 600;
+    min-width: 16px; height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--dark);
+  }
+
+  /* Filter drawer */
+  #filter-drawer {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--dark);
+    border-bottom: 1px solid rgba(200,162,74,0.25);
+    padding: calc(var(--safe-top) + 76px) 14px 16px;
+    z-index: 900;
+    transform: translateY(-100%);
+    transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  }
+  #filter-drawer.open {
+    transform: translateY(0);
+  }
+  #filter-drawer .drawer-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    opacity: 0.7;
+    margin-bottom: 10px;
+  }
+  #filter-drawer .filters {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .filter-btn {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(245,240,232,0.15);
+    background: transparent;
+    color: rgba(245,240,232,0.55);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    user-select: none;
+  }
+  .filter-btn .dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+  .filter-btn.active {
+    background: rgba(245,240,232,0.12);
+    color: #f5f0e8;
+    border-color: rgba(245,240,232,0.35);
+  }
+  .filter-btn[data-cat="all"] {
+    grid-column: 1 / -1;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 8px;
+  }
+
+  /* Scrim behind drawer */
+  #scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 800;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #scrim.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ── MAIN LAYOUT ──────────────────────────── */
+  #main {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── MAP ──────────────────────────────────── */
+  #map {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    background: #2a2620;
+  }
+
+  /* Leaflet attribution tweak */
+  .leaflet-control-attribution {
+    font-size: 9px !important;
+    background: rgba(30,27,22,0.7) !important;
+    color: rgba(245,240,232,0.4) !important;
+    padding: 2px 5px !important;
+  }
+  .leaflet-control-attribution a { color: rgba(200,162,74,0.6) !important; }
+
+  /* Zoom controls - bigger touch targets on mobile */
+  .leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
+    margin-top: 10px !important;
+    margin-right: 10px !important;
+  }
+  .leaflet-control-zoom a {
+    background: var(--dark) !important;
+    color: #f5f0e8 !important;
+    border-color: rgba(200,162,74,0.3) !important;
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 18px !important;
+  }
+  .leaflet-control-zoom a:first-child { border-top-left-radius: 8px !important; border-top-right-radius: 8px !important; }
+  .leaflet-control-zoom a:last-child { border-bottom-left-radius: 8px !important; border-bottom-right-radius: 8px !important; }
+
+  /* ── CUSTOM MARKERS ───────────────────────── */
+  .pin-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.18s ease;
+  }
+  .pin-wrap:active { transform: scale(0.92); }
+
+  .pin-circle {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--col);
+    border: 2.5px solid rgba(255,255,255,0.95);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+  }
+  .pin-stem {
+    width: 2px; height: 10px;
+    background: var(--col);
+    opacity: 0.8;
+  }
+  .pin-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--col);
+    opacity: 0.6;
+  }
+
+  /* Active marker highlight */
+  .pin-wrap.selected .pin-circle {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 4px rgba(200,162,74,0.4), 0 3px 12px rgba(0,0,0,0.5);
+  }
+
+  /* ── LOCATION COUNT CHIP ──────────────────── */
+  #loc-count {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: rgba(30,27,22,0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 8px;
+    padding: 6px 10px;
+    z-index: 500;
+    border: 1px solid rgba(200,162,74,0.25);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    color: rgba(245,240,232,0.6);
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+  }
+  #loc-count .num {
+    color: var(--gold);
+    font-size: 0.8rem;
+    font-weight: 400;
+  }
+
+  /* ── BOTTOM SHEET (mobile panel) ──────────── */
+  #sheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background: var(--panel);
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+    box-shadow: 0 -6px 24px rgba(0,0,0,0.25);
+    z-index: 600;
+    transform: translateY(calc(100% - 0px));
+    transition: transform 0.32s cubic-bezier(.4,0,.2,1);
+    display: flex;
+    flex-direction: column;
+    max-height: 82vh;
+    padding-bottom: var(--safe-bottom);
+    touch-action: none;
+  }
+  #sheet.peek {
+    transform: translateY(0);
+    max-height: 42vh;
+  }
+  #sheet.full {
+    transform: translateY(0);
+    max-height: 82vh;
+  }
+
+  /* Drag handle */
+  .sheet-handle {
+    flex-shrink: 0;
+    padding: 8px 0 4px;
+    display: flex;
+    justify-content: center;
+    cursor: grab;
+  }
+  .sheet-handle .bar {
+    width: 40px; height: 4px;
+    background: rgba(30,27,22,0.18);
+    border-radius: 4px;
+  }
+
+  /* Close button for sheet */
+  .sheet-close {
+    position: absolute;
+    top: 8px; right: 10px;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: rgba(30,27,22,0.06);
+    border: none;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+  .sheet-close:active { background: rgba(30,27,22,0.12); }
+
+  /* Sheet content scroll area */
+  .sheet-content {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+  .sheet-content::-webkit-scrollbar { width: 3px; }
+  .sheet-content::-webkit-scrollbar-thumb { background: rgba(30,27,22,0.15); border-radius: 2px; }
+
+  .detail-hero {
+    height: 130px;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .detail-hero .hero-bg {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3.5rem;
+  }
+  .detail-hero .cat-strip {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+  }
+
+  .detail-body {
+    padding: 16px 18px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .detail-cat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #fff;
+    width: fit-content;
+  }
+
+  .detail-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.55rem;
+    font-weight: 600;
+    line-height: 1.18;
+    color: var(--text);
+  }
+
+  .detail-artist {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+  .detail-artist:empty { display: none; }
+
+  .detail-desc {
+    font-size: 0.86rem;
+    line-height: 1.65;
+    color: #5a5248;
+    font-weight: 300;
+  }
+
+  .detail-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: rgba(30,27,22,0.04);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .meta-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .meta-row .mk {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    width: 60px;
+    flex-shrink: 0;
+    padding-top: 1px;
+  }
+  .meta-row .mv {
+    font-size: 0.78rem;
+    color: var(--text);
+    line-height: 1.45;
+    flex: 1;
+  }
+
+  .detail-tags {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .detail-tag {
+    font-size: 0.7rem;
+    padding: 4px 10px;
+    border-radius: 5px;
+    background: rgba(30,27,22,0.06);
+    color: var(--muted);
+    border: 1px solid rgba(30,27,22,0.08);
+  }
+
+  /* ── DESKTOP OVERRIDES ─────────────────────── */
+  @media (min-width: 768px) {
+    #topbar {
+      padding: 10px 20px;
+      height: 58px;
+    }
+    .brand {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 10px;
+      flex: initial;
+    }
+    .brand h1 { font-size: 1.3rem; }
+    .brand .sub { font-size: 0.6rem; letter-spacing: 0.18em; }
+
+    /* Hide hamburger, show inline filters */
+    #filter-toggle { display: none; }
+
+    #filter-drawer {
+      position: static;
+      transform: none !important;
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+    #filter-drawer .drawer-title { display: none; }
+    #filter-drawer .filters {
+      display: flex;
+      grid-template-columns: none;
+      gap: 6px;
+    }
+    .filter-btn {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+    }
+    .filter-btn[data-cat="all"] {
+      grid-column: auto;
+      padding: 5px 12px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      text-transform: none;
+    }
+    #scrim { display: none; }
+
+    #loc-count {
+      top: 14px; left: 14px;
+      font-size: 0.62rem;
+      padding: 7px 12px;
+    }
+
+    /* Restore side panel layout */
+    #main { display: flex; }
+    #map { flex: 1; }
+
+    #sheet {
+      position: relative;
+      width: 340px;
+      height: 100%;
+      max-height: none !important;
+      border-radius: 0;
+      border-left: 1px solid var(--border);
+      box-shadow: none;
+      transform: none !important;
+      flex-shrink: 0;
+    }
+    #sheet:not(.full):not(.peek) { display: none; }
+    #sheet.peek, #sheet.full { display: flex; }
+    .sheet-handle { display: none; }
+    .sheet-close {
+      background: rgba(30,27,22,0.5);
+      color: #f5f0e8;
+      top: 10px; right: 10px;
+    }
+    .sheet-close:hover { background: rgba(30,27,22,0.8); }
+    .detail-hero { height: 160px; }
+
+    /* Show desktop count tag */
+    #desktop-count-tag { display: inline; }
+  }
+
+  @media (max-width: 767px) {
+    #desktop-count-tag { display: none; }
+  }
+
+  /* Very small phones */
+  @media (max-width: 360px) {
+    .brand h1 { font-size: 1.05rem; }
+    .brand .sub { font-size: 0.5rem; }
+  }
+
+  /* Landscape phones - keep sheet low */
+  @media (max-width: 767px) and (orientation: landscape) {
+    #sheet.peek { max-height: 75vh; }
+    #sheet.full { max-height: 90vh; }
+    .detail-hero { height: 100px; }
+  }
+
+  /* Desktop count tag */
+  #desktop-count-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+    color: rgba(200,162,74,0.6);
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="brand">
+    <h1>LODHI <em>ART</em> DISTRICT</h1>
+    <div class="sub">Interactive Map · New Delhi</div>
+  </div>
+
+  <!-- Filters (inline on desktop, drawer on mobile) -->
+  <div id="filter-drawer">
+    <div class="drawer-title">Filter by category</div>
+    <div class="filters" id="filters">
+      <div class="filter-btn active" data-cat="all">
+        <span class="dot" style="background:#f5f0e8;"></span> All categories
+      </div>
+      <div class="filter-btn active" data-cat="mural">
+        <span class="dot" style="background:var(--cat-mural);"></span> Murals
+      </div>
+      <div class="filter-btn active" data-cat="park">
+        <span class="dot" style="background:var(--cat-park);"></span> Parks
+      </div>
+      <div class="filter-btn active" data-cat="food">
+        <span class="dot" style="background:var(--cat-food);"></span> Food
+      </div>
+      <div class="filter-btn active" data-cat="culture">
+        <span class="dot" style="background:var(--cat-culture);"></span> Culture
+      </div>
+      <div class="filter-btn active" data-cat="landmark">
+        <span class="dot" style="background:var(--cat-landmark);"></span> Landmarks
+      </div>
+    </div>
+  </div>
+
+  <span id="desktop-count-tag">— locations</span>
+
+  <!-- Hamburger toggle (mobile only) -->
+  <button id="filter-toggle" aria-label="Toggle filters">
+    <span class="bar"></span>
+    <span class="bar"></span>
+    <span class="bar"></span>
+    <span class="filter-count" id="filter-count">5</span>
+  </button>
+</div>
+
+<!-- Scrim for mobile drawer -->
+<div id="scrim"></div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="map"></div>
+
+  <!-- Location count -->
+  <div id="loc-count">
+    <span class="num" id="visible-count">—</span>
+    <span>locations</span>
+  </div>
+
+  <!-- BOTTOM SHEET (also acts as side panel on desktop) -->
+  <div id="sheet">
+    <div class="sheet-handle" id="sheet-handle"><div class="bar"></div></div>
+    <button class="sheet-close" id="sheet-close" aria-label="Close">✕</button>
+    <div class="sheet-content">
+      <div class="detail-hero" id="detail-hero">
+        <div class="hero-bg" id="hero-bg"></div>
+        <div class="cat-strip" id="cat-strip"></div>
+      </div>
+      <div class="detail-body">
+        <div class="detail-cat-badge" id="detail-badge"></div>
+        <div class="detail-name" id="detail-name"></div>
+        <div class="detail-artist" id="detail-artist"></div>
+        <div class="detail-desc" id="detail-desc"></div>
+        <div class="detail-meta" id="detail-meta"></div>
+        <div class="detail-tags" id="detail-tags"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────
+const LOCATIONS = [
+  // MURALS
+  {
+    id: 1, cat: 'mural', emoji: '🎨',
+    name: 'The Yoga Mural',
+    artist: 'Yantr (India)',
+    lat: 28.5924, lng: 77.2290,
+    year: '2016',
+    desc: 'A monumental geometric depiction of the human form in a yoga posture, rendered in bold warm tones. One of the first murals commissioned for the district, it set the template for large-scale public art in Lodhi Colony.',
+    location: 'Near Veer Sarvarkar Park entrance, Third Ave',
+    theme: 'Body, geometry, tradition',
+    tags: ['Geometric', 'Large-scale', 'Flagship mural', '2016'],
+  },
+  {
+    id: 2, cat: 'mural', emoji: '🦋',
+    name: 'The Metamorphosis',
+    artist: 'Nayan Shrimali & Ayesha Shrimali (India)',
+    lat: 28.5918, lng: 77.2278,
+    year: '2017',
+    desc: 'A stunning wall of butterflies and floral motifs layered with hand-drawn folk patterns. The duo blends Rajasthani miniature tradition with street art scale — a meditation on transformation and nature.',
+    location: 'Third Avenue, south stretch',
+    theme: 'Nature, folk art, transformation',
+    tags: ['Folk art', 'Nature', 'Rajasthani influence'],
+  },
+  {
+    id: 3, cat: 'mural', emoji: '👁️',
+    name: 'Eye of the Storm',
+    artist: 'Owen Dippie (New Zealand)',
+    lat: 28.5930, lng: 77.2305,
+    year: '2016',
+    desc: 'A hyper-realistic eye rendered in muted desert tones, staring out across the colony. Dippie\'s signature photorealism creates an uncanny presence — as if the city itself is watching.',
+    location: 'Fourth Avenue Rd, east wall',
+    theme: 'Realism, identity, observation',
+    tags: ['Photorealism', 'International artist', 'Large portrait'],
+  },
+  {
+    id: 4, cat: 'mural', emoji: '🌿',
+    name: 'Urban Jungle',
+    artist: 'Askew One (New Zealand)',
+    lat: 28.5912, lng: 77.2315,
+    year: '2017',
+    desc: 'A riot of tropical foliage and wildlife erupting from the walls of a residential building. Askew One critiques urbanisation by imagining nature\'s reclamation of concrete — vibrant, dense and deliberately overwhelming.',
+    location: 'Fifth Avenue Rd, residential block',
+    theme: 'Environment, urbanisation, nature',
+    tags: ['Environment', 'Colour-heavy', 'Wildlife'],
+  },
+  {
+    id: 5, cat: 'mural', emoji: '🧘',
+    name: 'The Vedic Figure',
+    artist: 'Shilo Shiv Suleman (India)',
+    lat: 28.5940, lng: 77.2270,
+    year: '2018',
+    desc: 'A glowing, cosmic feminine form dissolving into starlight and sacred geometry. Shilo\'s work draws from Vedic imagery and astrology — a deeply spiritual presence in the middle of a residential lane.',
+    location: 'Near Khanna Market junction',
+    theme: 'Spirituality, feminism, cosmos',
+    tags: ['Sacred geometry', 'Feminist', 'Vedic', 'Luminous'],
+  },
+  {
+    id: 6, cat: 'mural', emoji: '🐘',
+    name: 'Gond Animal Spirits',
+    artist: 'Venkat Raman Singh Shyam (India)',
+    lat: 28.5906, lng: 77.2295,
+    year: '2017',
+    desc: 'Venkat Raman brings his Gond tribal art tradition to an enormous residential wall. Intricate patterns of animals, birds and trees rendered in the classic Gond style — one of the most photographed works in the district.',
+    location: 'South of Veer Sarvarkar Park',
+    theme: 'Tribal art, animals, ecology',
+    tags: ['Gond art', 'Tribal', 'Animals', 'Intricate patterns'],
+  },
+  {
+    id: 7, cat: 'mural', emoji: '✊',
+    name: 'Azadi',
+    artist: 'Daku (India)',
+    lat: 28.5935, lng: 77.2320,
+    year: '2019',
+    desc: 'Typography as activism. Daku\'s shadow-based installation spells words across a wall using the shadow of a wire sculpture — the text only becomes legible at certain times of day. A commentary on freedom, visibility and erasure.',
+    location: 'Corner Fifth Ave Rd & main road',
+    theme: 'Freedom, activism, typography',
+    tags: ['Typography', 'Activism', 'Conceptual', 'Shadow art'],
+  },
+  {
+    id: 8, cat: 'mural', emoji: '🎭',
+    name: 'The Invisible Man',
+    artist: 'Guido van Helten (Australia)',
+    lat: 28.5950, lng: 77.2288,
+    year: '2016',
+    desc: 'A towering, photorealistic portrait of an elderly Lodhi Colony resident — rendered in faded, aged tones that mirror the history of the building itself. Van Helten painted with his usual technique of translucent washes.',
+    location: 'Near the colony market, north end',
+    theme: 'Community, ageing, memory',
+    tags: ['Photorealism', 'Portrait', 'Community', 'Australian artist'],
+  },
+
+  // PARKS
+  {
+    id: 9, cat: 'park', emoji: '🌳',
+    name: 'Veer Sarvarkar Park',
+    artist: null,
+    lat: 28.5922, lng: 77.2295,
+    year: null,
+    desc: 'The green lung at the heart of Lodhi Colony. A large, shaded park used by residents for morning walks, yoga, and children\'s play. Several murals are visible from its perimeter, making it a natural gathering point for art walkers.',
+    location: 'Between Third Ave and Fourth Ave Rd',
+    theme: 'Community green space',
+    tags: ['Park', 'Walking', 'Yoga', 'Central'],
+  },
+  {
+    id: 10, cat: 'park', emoji: '🌺',
+    name: 'Lodhi Garden (nearby)',
+    artist: null,
+    lat: 28.5930, lng: 77.2235,
+    year: null,
+    desc: 'One of Delhi\'s most beautiful historical gardens, a short walk from the Art District. Contains 15th-century Sayyid and Lodi dynasty tombs set within 90 acres of manicured lawns, trees, and water features.',
+    location: '~800m west, off Lodhi Road',
+    theme: 'Heritage, nature, history',
+    tags: ['Heritage', 'Mughal garden', 'Historic tombs', 'Green space'],
+  },
+
+  // FOOD
+  {
+    id: 11, cat: 'food', emoji: '☕',
+    name: 'Carnatic Cafe',
+    artist: null,
+    lat: 28.5932, lng: 77.2330,
+    year: null,
+    desc: 'A beloved South Indian café with an artsy interior and a loyal local following. Famous for its filter coffee, dosas and relaxed vibe — the go-to spot before or after an art walk through the colony.',
+    location: 'Fifth Ave Rd, near Lodhi Rd',
+    theme: 'South Indian, café culture',
+    tags: ['Coffee', 'Dosa', 'South Indian', 'Casual dining'],
+  },
+  {
+    id: 12, cat: 'food', emoji: '🍜',
+    name: 'Khanna Market',
+    artist: null,
+    lat: 28.5945, lng: 77.2278,
+    year: null,
+    desc: 'The northern anchor of Lodhi Colony\'s street life — a neighbourhood market with small eateries, chai stalls, vegetable vendors and a pharmacy. A real slice of residential Delhi life amid the art.',
+    location: 'North end, near Fourth Ave Rd',
+    theme: 'Local market, street food',
+    tags: ['Street food', 'Chai', 'Local market', 'Authentic'],
+  },
+  {
+    id: 13, cat: 'food', emoji: '🥗',
+    name: 'Meharchand Market',
+    artist: null,
+    lat: 28.5900, lng: 77.2280,
+    year: null,
+    desc: 'The upscale market at the south end of the colony — a mix of boutique stores, cafés and restaurants. Popular with expats and embassy staff from nearby diplomatic enclave. Good place to end an art walk.',
+    location: 'South end of colony',
+    theme: 'Boutique, café, dining',
+    tags: ['Boutique', 'Cafés', 'Expat-friendly', 'Restaurants'],
+  },
+
+  // CULTURE
+  {
+    id: 14, cat: 'culture', emoji: '🏛️',
+    name: 'St+Art India Mural Walk Start',
+    artist: null,
+    lat: 28.5928, lng: 77.2282,
+    year: '2015',
+    desc: 'The official starting point for the St+Art India Foundation\'s guided mural walks. The foundation transformed Lodhi Colony into India\'s first open-air art district beginning in 2015, commissioning artists from across India and the world.',
+    location: 'Third Ave junction, near park',
+    theme: 'Art foundation, guided walks',
+    tags: ['St+Art India', 'Guided walk', 'Art foundation', 'Starting point'],
+  },
+  {
+    id: 15, cat: 'culture', emoji: '📸',
+    name: 'Photography Hotspot',
+    artist: null,
+    lat: 28.5915, lng: 77.2300,
+    year: null,
+    desc: 'The convergence of three major murals at a single street corner makes this the most-photographed spot in the district. Golden hour light on the western-facing walls creates extraordinary colour. Best visited 4–6pm.',
+    location: 'Third Ave & connecting lane intersection',
+    theme: 'Photography, light, art',
+    tags: ['Photography', 'Golden hour', 'Instagram', 'Multi-mural corner'],
+  },
+
+  // LANDMARKS
+  {
+    id: 16, cat: 'landmark', emoji: '📍',
+    name: 'Lodhi Art District Sign',
+    artist: null,
+    lat: 28.5955, lng: 77.2285,
+    year: '2015',
+    desc: 'The official entrance marker of the Lodhi Art District — as seen on Google Maps. A good orientation point when entering the colony from the northern end near Fourth Ave Rd.',
+    location: 'North entrance, Fourth Ave Rd',
+    theme: 'Entrance, orientation',
+    tags: ['Entrance', 'Orientation', 'Landmark', 'Starting point'],
+  },
+  {
+    id: 17, cat: 'landmark', emoji: '🏫',
+    name: 'Navyug Senior School',
+    artist: null,
+    lat: 28.5892, lng: 77.2295,
+    year: null,
+    desc: 'A government secondary school at the southern edge of the colony. Several murals on surrounding walls were painted in collaboration with students — a reminder that community engagement is central to the art district\'s philosophy.',
+    location: 'South end, near Meharchand Market',
+    theme: 'Education, community art',
+    tags: ['School', 'Community', 'Education', 'Student murals'],
+  },
+];
+
+// ── CATEGORY COLORS ────────────────────────────────────
+const CAT_COLORS = {
+  mural:   '#c0563a',
+  park:    '#4a8a5c',
+  food:    '#c07830',
+  culture: '#5870b0',
+  landmark:'#7a50a0',
+};
+const CAT_LABELS = {
+  mural: 'Mural / Street Art',
+  park: 'Park & Green Space',
+  food: 'Food & Market',
+  culture: 'Cultural Venue',
+  landmark: 'Landmark',
+};
+const CAT_BG = {
+  mural:   'linear-gradient(135deg,#3a1510 0%,#1e0c0a 100%)',
+  park:    'linear-gradient(135deg,#0e2a18 0%,#08140e 100%)',
+  food:    'linear-gradient(135deg,#2e1c08 0%,#160e04 100%)',
+  culture: 'linear-gradient(135deg,#101830 0%,#080e1a 100%)',
+  landmark:'linear-gradient(135deg,#1e1028 0%,#0e0814 100%)',
+};
+
+// ── MAP INIT ───────────────────────────────────────────
+const isMobile = () => window.innerWidth < 768;
+
+const map = L.map('map', {
+  center: [28.5925, 77.2295],
+  zoom: 16,
+  zoomControl: true,
+  tap: true,
+  tapTolerance: 15,
+});
+
+// OpenStreetMap — no API key required
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+// ── MARKERS ────────────────────────────────────────────
+const markers = {};
+let activeFilters = new Set(['mural','park','food','culture','landmark']);
+let selectedId = null;
+
+function createIcon(loc, selected = false) {
+  const col = CAT_COLORS[loc.cat];
+  const html = `
+    <div class="pin-wrap ${selected ? 'selected' : ''}" style="--col:${col}">
+      <div class="pin-circle">${loc.emoji}</div>
+      <div class="pin-stem"></div>
+      <div class="pin-dot"></div>
+    </div>`;
+  return L.divIcon({
+    html,
+    className: '',
+    iconSize: [32, 50],
+    iconAnchor: [16, 50],
+    popupAnchor: [0, -50],
+  });
+}
+
+LOCATIONS.forEach(loc => {
+  const m = L.marker([loc.lat, loc.lng], { icon: createIcon(loc) });
+  m.on('click', () => showPanel(loc));
+  m.addTo(map);
+  markers[loc.id] = m;
+});
+
+updateCount();
+
+// ── FILTER LOGIC ───────────────────────────────────────
+document.querySelectorAll('.filter-btn[data-cat]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const cat = btn.dataset.cat;
+    if (cat === 'all') {
+      const allActive = activeFilters.size === 5;
+      if (allActive) {
+        activeFilters.clear();
+        document.querySelectorAll('.filter-btn[data-cat]').forEach(b => b.classList.remove('active'));
+      } else {
+        activeFilters = new Set(['mural','park','food','culture','landmark']);
+        document.querySelectorAll('.filter-btn[data-cat]').forEach(b => b.classList.add('active'));
+      }
+    } else {
+      if (activeFilters.has(cat)) {
+        activeFilters.delete(cat);
+        btn.classList.remove('active');
+      } else {
+        activeFilters.add(cat);
+        btn.classList.add('active');
+      }
+      const allBtn = document.querySelector('.filter-btn[data-cat="all"]');
+      allBtn.classList.toggle('active', activeFilters.size === 5);
+    }
+    applyFilters();
+  });
+});
+
+function applyFilters() {
+  LOCATIONS.forEach(loc => {
+    const m = markers[loc.id];
+    if (activeFilters.has(loc.cat)) {
+      if (!map.hasLayer(m)) m.addTo(map);
+    } else {
+      if (map.hasLayer(m)) map.removeLayer(m);
+    }
+  });
+  updateCount();
+}
+
+function updateCount() {
+  const n = LOCATIONS.filter(l => activeFilters.has(l.cat)).length;
+  document.getElementById('visible-count').textContent = n;
+  document.getElementById('desktop-count-tag').textContent = `${n} location${n !== 1 ? 's' : ''}`;
+  document.getElementById('filter-count').textContent = activeFilters.size;
+}
+
+// ── FILTER DRAWER TOGGLE (mobile) ──────────────────────
+const filterToggle = document.getElementById('filter-toggle');
+const filterDrawer = document.getElementById('filter-drawer');
+const scrim = document.getElementById('scrim');
+
+function openDrawer() {
+  filterToggle.classList.add('open');
+  filterDrawer.classList.add('open');
+  scrim.classList.add('visible');
+}
+function closeDrawer() {
+  filterToggle.classList.remove('open');
+  filterDrawer.classList.remove('open');
+  scrim.classList.remove('visible');
+}
+filterToggle.addEventListener('click', () => {
+  if (filterDrawer.classList.contains('open')) closeDrawer();
+  else openDrawer();
+});
+scrim.addEventListener('click', closeDrawer);
+
+// ── SHEET / PANEL ──────────────────────────────────────
+const sheet = document.getElementById('sheet');
+
+function showPanel(loc) {
+  selectedId = loc.id;
+
+  // Update marker visual selection
+  LOCATIONS.forEach(l => {
+    const m = markers[l.id];
+    if (m) m.setIcon(createIcon(l, l.id === selectedId));
+  });
+
+  // Hero
+  const hero = document.getElementById('detail-hero');
+  hero.style.background = CAT_BG[loc.cat];
+  document.getElementById('hero-bg').textContent = loc.emoji;
+  document.getElementById('cat-strip').style.background = CAT_COLORS[loc.cat];
+
+  // Badge
+  const badge = document.getElementById('detail-badge');
+  badge.style.background = CAT_COLORS[loc.cat];
+  badge.textContent = CAT_LABELS[loc.cat];
+
+  // Name & artist
+  document.getElementById('detail-name').textContent = loc.name;
+  const artistEl = document.getElementById('detail-artist');
+  artistEl.textContent = loc.artist ? `by ${loc.artist}` : '';
+
+  // Desc
+  document.getElementById('detail-desc').textContent = loc.desc;
+
+  // Meta
+  const meta = document.getElementById('detail-meta');
+  const rows = [];
+  if (loc.location) rows.push(['Location', loc.location]);
+  if (loc.year) rows.push(['Year', loc.year]);
+  if (loc.theme) rows.push(['Theme', loc.theme]);
+  meta.innerHTML = rows.map(([k,v]) =>
+    `<div class="meta-row"><span class="mk">${k}</span><span class="mv">${v}</span></div>`
+  ).join('');
+
+  // Tags
+  const tagsEl = document.getElementById('detail-tags');
+  tagsEl.innerHTML = (loc.tags || []).map(t =>
+    `<span class="detail-tag">${t}</span>`
+  ).join('');
+
+  // Scroll to top of sheet content
+  document.querySelector('.sheet-content').scrollTop = 0;
+
+  // Show sheet (peek on mobile, full on desktop)
+  sheet.classList.remove('full');
+  sheet.classList.add('peek');
+
+  // Pan map — offset so marker isn't hidden under the sheet on mobile
+  if (isMobile()) {
+    const mapHeight = document.getElementById('map').clientHeight;
+    const sheetHeight = mapHeight * 0.42;
+    const visibleCenterY = (mapHeight - sheetHeight) / 2;
+    const latLng = map.project([loc.lat, loc.lng], map.getZoom());
+    latLng.y -= (mapHeight / 2 - visibleCenterY);
+    const newCenter = map.unproject(latLng, map.getZoom());
+    map.panTo(newCenter, { animate: true, duration: 0.4 });
+  } else {
+    map.panTo([loc.lat, loc.lng], { animate: true, duration: 0.5 });
+  }
+}
+
+function closePanel() {
+  sheet.classList.remove('peek', 'full');
+  selectedId = null;
+  // Reset all markers
+  LOCATIONS.forEach(l => {
+    const m = markers[l.id];
+    if (m) m.setIcon(createIcon(l, false));
+  });
+}
+
+document.getElementById('sheet-close').addEventListener('click', closePanel);
+
+// ── DRAG SHEET UP/DOWN (mobile) ────────────────────────
+const sheetHandle = document.getElementById('sheet-handle');
+let dragStartY = 0;
+let dragStartState = 'peek';
+let dragging = false;
+
+function onDragStart(e) {
+  if (!isMobile()) return;
+  dragging = true;
+  dragStartY = (e.touches ? e.touches[0].clientY : e.clientY);
+  dragStartState = sheet.classList.contains('full') ? 'full' : 'peek';
+  sheet.style.transition = 'none';
+}
+function onDragMove(e) {
+  if (!dragging) return;
+  e.preventDefault();
+  const y = (e.touches ? e.touches[0].clientY : e.clientY);
+  const dy = y - dragStartY;
+  // Simple visual feedback — clamp movement
+  if (Math.abs(dy) > 5) {
+    const baseOffset = dragStartState === 'full' ? 0 : 0;
+    const offset = Math.max(-200, Math.min(300, dy + baseOffset));
+    sheet.style.transform = `translateY(${offset}px)`;
+  }
+}
+function onDragEnd(e) {
+  if (!dragging) return;
+  dragging = false;
+  sheet.style.transition = '';
+  sheet.style.transform = '';
+
+  const y = (e.changedTouches ? e.changedTouches[0].clientY : e.clientY);
+  const dy = y - dragStartY;
+
+  if (dragStartState === 'peek') {
+    if (dy < -60) {
+      // Drag up → expand
+      sheet.classList.remove('peek');
+      sheet.classList.add('full');
+    } else if (dy > 60) {
+      // Drag down → close
+      closePanel();
+    }
+  } else { // full
+    if (dy > 120) {
+      closePanel();
+    } else if (dy > 40) {
+      sheet.classList.remove('full');
+      sheet.classList.add('peek');
+    }
+  }
+}
+
+sheetHandle.addEventListener('touchstart', onDragStart, { passive: true });
+sheetHandle.addEventListener('touchmove', onDragMove, { passive: false });
+sheetHandle.addEventListener('touchend', onDragEnd);
+sheetHandle.addEventListener('mousedown', onDragStart);
+document.addEventListener('mousemove', onDragMove);
+document.addEventListener('mouseup', onDragEnd);
+
+// Tap handle to toggle between peek and full
+sheetHandle.addEventListener('click', (e) => {
+  if (!isMobile()) return;
+  if (Math.abs(e.clientY - dragStartY) < 5) {
+    sheet.classList.toggle('full');
+    sheet.classList.toggle('peek');
+  }
+});
+
+// Recalc on resize
+window.addEventListener('resize', () => {
+  map.invalidateSize();
+  if (!isMobile()) {
+    closeDrawer();
+  }
+});
+
+// Prevent map zoom on double-tap of UI elements
+['topbar', 'filter-drawer', 'sheet'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+});
+</script>
+</body>
+</html>
